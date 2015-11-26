@@ -3,7 +3,7 @@
 * To change this template file, choose Tools | Templates
 * and open the template in the editor.
 */
-package homework3;
+package market;
 
 import bank.Account;
 import java.math.BigInteger;
@@ -22,21 +22,21 @@ import javax.crypto.spec.PBEKeySpec;
  *
  * @author David
  */
-public class OwnerImpl extends UnicastRemoteObject implements Owner {
+public class UserImpl extends UnicastRemoteObject implements User {
     
     private String name;
     private String password;
     private Account account;
     
-    public OwnerImpl(String name, String password, Account account) throws RemoteException, Exception{
+    public UserImpl(String name, String password, Account account) throws RemoteException, Exception{
         this.name=name;
         try {
             this.password=generateStorngPasswordHash(password);
         } catch (NoSuchAlgorithmException ex) {
-            Logger.getLogger(OwnerImpl.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(UserImpl.class.getName()).log(Level.SEVERE, null, ex);
             throw new Exception();
         } catch (InvalidKeySpecException ex) {
-            Logger.getLogger(OwnerImpl.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(UserImpl.class.getName()).log(Level.SEVERE, null, ex);
             throw new Exception();
         }
         this.account=account;

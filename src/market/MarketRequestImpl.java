@@ -3,16 +3,23 @@
 * To change this template file, choose Tools | Templates
 * and open the template in the editor.
 */
-package homework3;
+package market;
 
 import bank.Account;
 import bank.RejectedException;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  *
@@ -20,13 +27,49 @@ import java.util.Map;
  */
 public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequest{
     
+    private String datasource="mydb";
+    private Connection conn;
+    private Statement statement;
+    private PreparedStatement insertItemStatement;
+    private PreparedStatement findItemStatement;
+    private PreparedStatement deleteItemStatement;
+    private PreparedStatement insertUserStatement;
+    private PreparedStatement findUserStatement;
+    private PreparedStatement deleteUserStatement;
+    
     // The key is the item-ID
     private final Map<Long, Item> uploadedItems=new HashMap<>();
     private final Map<String, List<Item>> wishedItems=new HashMap<>();
-    private final Map<String, Owner> registeredUsers=new HashMap<>();
+    private final Map<String, User> registeredUsers=new HashMap<>();
     
     public MarketRequestImpl() throws RemoteException
     {
+        try {
+            connect();
+        } catch (SQLException ex) {
+            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+    
+    private void connect() throws SQLException{
+        conn=DriverManager.getConnection("jdbc:derby://localhost:1527/" + datasource + ";create=true");
+        statement=conn.createStatement();
+        createTable();
+    }
+    
+    private void createTable() throws SQLException{
+        statement.executeUpdate("CREATE TABLE ITEM (name VARCHAR(64) NOT NULL, price FLOAT NOT NULL, id BIGINT PRIMARY KEY, owner VARCHAR(64) NOT NULL)");
+        statement.executeUpdate("CREATE TABLE USER (name VARCHAR(64) PRIMARY KEY, password VARCHAR(256) NOT NULL)");
+        statement.executeUpdate("CREATE TABLE PURCHASE (buyer VARCHAR(64) NOT NULL, seller VARCHAR(64) NOT NULL, price FLOAT, time TIMESTAMP NOT NULL)");
+        // Item statements
+        insertItemStatement=conn.prepareStatement("INSERT INTO ITEM (name, price, id, owner) VALUES (?, ?, ?, ?)");
+        findItemStatement=conn.prepareStatement("SELECT (name, price, id, owner) FROM ITEM WHERE id=?");
+        deleteItemStatement=conn.prepareStatement("DELETE FROM ITEM WHERE id=?");
+        // User statements
+        insertUserStatement=conn.prepareStatement("INSERT INTO USER (name, password) VALUES (?, ?)");
+        findUserStatement=conn.prepareStatement("SELECT (name, password) FROM USER WHERE name=?");
+        deleteUserStatement=conn.prepareStatement("DELETE FROM USER WHERE name=?");
+        // Sales statements
     }
     
     @Override
@@ -55,7 +98,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
                         // If a wished item has the same name and a equal or higher price than the currently uploaded item => send notification
                         // to the owner of the wish-item
                         if(item.getName().equals(wishedItem.getName()) && item.getPrice()<=wishedItem.getPrice()){
-                            Owner owner=registeredUsers.get(wishedItem.getOwner());
+                            User owner=registeredUsers.get(wishedItem.getOwner());
                             if(owner!=null)
                                 owner.wishAvaible(item);
                             
@@ -82,7 +125,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message BuyItem(long itemId, Owner buyer) throws RemoteException {
+    public Message BuyItem(long itemId, User buyer) throws RemoteException {
         String message="Unspecified error occured when buying item. No item bought.";
         synchronized(uploadedItems){
             Item item=uploadedItems.get(itemId);
@@ -90,7 +133,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
             if(item!=null){
                 System.out.println("buy item. item = "+item.toString()+", buyer = "+buyer.toString());
                 
-                Owner owner=registeredUsers.get(item.getOwner());
+                User owner=registeredUsers.get(item.getOwner());
                 if(owner!=null){
                     Account sellerAccount=owner.getBankAccount();
                     Account buyerAccount=buyer.getBankAccount();
@@ -127,9 +170,9 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
         System.out.println("add item. "+item.toString());
         String message="Error adding wish.";
         synchronized(registeredUsers){
-            Owner owner=registeredUsers.get(item.getOwner());
+            User owner=registeredUsers.get(item.getOwner());
             if(owner!=null){
-                Owner user=registeredUsers.get(owner.getName());
+                User user=registeredUsers.get(owner.getName());
                 if(user!=null){
                     synchronized(wishedItems){
                         List<Item> list=wishedItems.get(item.getName());
@@ -151,7 +194,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message Register(Owner owner) throws RemoteException {
+    public Message Register(User owner) throws RemoteException {
         System.out.println("register. "+owner.getName());
         String message="Error registering user";
         synchronized(registeredUsers){
@@ -168,7 +211,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message Unregister(Owner owner) throws RemoteException {
+    public Message Unregister(User owner) throws RemoteException {
         System.out.println("unregister. "+owner.getName());
         String message="Error unregistering user";
         synchronized(registeredUsers){

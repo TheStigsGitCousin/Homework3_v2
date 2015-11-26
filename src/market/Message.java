@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package homework3;
+package market;
 
 import com.sun.org.apache.xml.internal.utils.SerializableLocatorImpl;
 import java.io.Serializable;

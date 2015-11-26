@@ -3,7 +3,7 @@
  * To change this template file, choose Tools | Templates
  * and open the template in the editor.
  */
-package homework3;
+package market;
 
 import bank.Account;
 import java.rmi.Remote;
@@ -13,7 +13,7 @@ import java.rmi.RemoteException;
  *
  * @author David
  */
-public interface Owner extends Remote {
+public interface User extends Remote {
     public String getName() throws RemoteException;
     public String getPassword() throws RemoteException;
     public Account getBankAccount() throws RemoteException;

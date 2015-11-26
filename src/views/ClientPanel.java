@@ -5,11 +5,11 @@
 */
 package views;
 
-import homework3.Item;
-import homework3.MarketRequest;
-import homework3.Message;
-import homework3.Owner;
-import homework3.OwnerImpl;
+import Market.Item;
+import Market.MarketRequest;
+import Market.Message;
+import Market.Owner;
+import Market.OwnerImpl;
 import bank.Bank;
 import bank.Account;
 import bank.RejectedException;
