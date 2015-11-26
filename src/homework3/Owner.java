@@ -15,6 +15,7 @@ import java.rmi.RemoteException;
  */
 public interface Owner extends Remote {
     public String getName() throws RemoteException;
+    public String getPassword() throws RemoteException;
     public Account getBankAccount() throws RemoteException;
     
     public void itemSold(Item item) throws RemoteException;

@@ -204,7 +204,14 @@ public class ClientPanel extends Panel {
                             return;
                         }
                         
-                        owner=new OwnerImpl(accountNameTextField.getText(), account);
+                        String password="passwordNameTextField.getText()";
+                        try {
+                            owner=new OwnerImpl(accountNameTextField.getText(), password,  account);
+                        } catch (Exception ex) {
+                            Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
+                            statusChanged("Catastrophic error with password encrypting.");
+                            return;
+                        }
                         Message msg=market.Register(owner);
                         String result=msg.message;
                         statusChanged(result);
