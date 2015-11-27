@@ -21,8 +21,13 @@ public class Item implements Serializable {
     private String owner;
     
     public Item(String name, float price, String owner){
+        this(name,price,0,owner);
+    }
+    
+    public Item(String name, float price, long id, String owner){
         this.name=name;
         this.price=price;
+        this.id=id;
         this.owner=owner;
     }
     

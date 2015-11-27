@@ -5,11 +5,11 @@
 */
 package views;
 
-import Market.Item;
-import Market.MarketRequest;
-import Market.Message;
-import Market.Owner;
-import Market.OwnerImpl;
+import market.Item;
+import market.MarketRequest;
+import market.Message;
+import market.User;
+import market.UserImpl;
 import bank.Bank;
 import bank.Account;
 import bank.RejectedException;
@@ -41,10 +41,12 @@ import javax.swing.SwingUtilities;
 public class ClientPanel extends Panel {
     public static ClientPanel clientPanel;
     
+    private String bankName;
+    
     private static MarketRequest market;
     private static Bank bankobj;
     private static final String DEFAULT_BANK_NAME = "Nordea";
-    private static Owner owner;
+    private static User owner;
     private static List<Item> currentlyListedItems;
     
     // Game components
@@ -65,6 +67,7 @@ public class ClientPanel extends Panel {
     private JButton buyButton=new JButton("buy");
     
     public ClientPanel(String bankName) throws RemoteException{
+        this.bankName=bankName;
         
         try {
             LocateRegistry.getRegistry(1099).list();
@@ -206,7 +209,7 @@ public class ClientPanel extends Panel {
                         
                         String password="passwordNameTextField.getText()";
                         try {
-                            owner=new OwnerImpl(accountNameTextField.getText(), password,  account);
+                            owner=new UserImpl(accountNameTextField.getText(), password,  account, bankName);
                         } catch (Exception ex) {
                             Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
                             statusChanged("Catastrophic error with password encrypting.");
@@ -221,6 +224,8 @@ public class ClientPanel extends Panel {
                         wishButton.setEnabled(true);
                         unregisterButton.setEnabled(true);
                     } catch (RemoteException ex) {
+                        Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
+                    } catch (RejectedException ex) {
                         Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
                     }
                 }

@@ -17,6 +17,7 @@ public interface User extends Remote {
     public String getName() throws RemoteException;
     public String getPassword() throws RemoteException;
     public Account getBankAccount() throws RemoteException;
+    public String getBankName() throws RemoteException;
     
     public void itemSold(Item item) throws RemoteException;
     public void wishAvaible(Item item) throws RemoteException;

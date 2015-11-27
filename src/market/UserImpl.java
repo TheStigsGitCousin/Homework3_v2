@@ -27,8 +27,9 @@ public class UserImpl extends UnicastRemoteObject implements User {
     private String name;
     private String password;
     private Account account;
+    private String bankName;
     
-    public UserImpl(String name, String password, Account account) throws RemoteException, Exception{
+    public UserImpl(String name, String password, Account account, String bankName) throws RemoteException, Exception{
         this.name=name;
         try {
             this.password=generateStorngPasswordHash(password);
@@ -40,6 +41,7 @@ public class UserImpl extends UnicastRemoteObject implements User {
             throw new Exception();
         }
         this.account=account;
+        this.bankName=bankName;
     }
     
     private static String generateStorngPasswordHash(String password) throws NoSuchAlgorithmException, InvalidKeySpecException
@@ -109,4 +111,8 @@ public class UserImpl extends UnicastRemoteObject implements User {
         return account;
     }
     
+    @Override
+    public String getBankName() throws RemoteException {
+        return bankName;
+    }
 }

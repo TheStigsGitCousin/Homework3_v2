@@ -5,10 +5,10 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.rmi.Naming;
 import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
 import java.util.StringTokenizer;
 
 public class Client {
+
     private static final String USAGE = "java bankrmi.Client <bank_url>";
     private static final String DEFAULT_BANK_NAME = "Nordea";
     Account account;
@@ -16,18 +16,14 @@ public class Client {
     private String bankname;
     String clientname;
 
-    public static enum CommandName {
+    static enum CommandName {
+
         newAccount, getAccount, deleteAccount, deposit, withdraw, balance, quit, help, list;
     };
 
     public Client(String bankName) {
         this.bankname = bankName;
         try {
-            try {
-                LocateRegistry.getRegistry(1099).list();
-            } catch (RemoteException e) {
-                LocateRegistry.createRegistry(1099);
-            }
             bankobj = (Bank) Naming.lookup(bankname);
         } catch (Exception e) {
             System.out.println("The runtime failed: " + e.getMessage());
@@ -125,7 +121,6 @@ public class Client {
                     System.out.println(commandName);
                 }
                 return;
-                        
         }
 
         // all further commands require a name to be specified
@@ -153,7 +148,7 @@ public class Client {
         // all further commands require a Account reference
         Account acc = bankobj.getAccount(userName);
         if (acc == null) {
-            System.out.println("No account for " + userName);
+            System.out.println("No account for" + userName);
             return;
         } else {
             account = acc;
@@ -179,6 +174,7 @@ public class Client {
     }
 
     private class Command {
+
         private String userName;
         private float amount;
         private CommandName commandName;
@@ -195,7 +191,7 @@ public class Client {
             return commandName;
         }
 
-        private Command(Client.CommandName commandName, String userName, float amount) {
+        private Command(CommandName commandName, String userName, float amount) {
             this.commandName = commandName;
             this.userName = userName;
             this.amount = amount;
@@ -208,7 +204,7 @@ public class Client {
             System.exit(1);
         }
 
-        String bankName;
+        String bankName = null;
         if (args.length > 0) {
             bankName = args[0];
             new Client(bankName).run();

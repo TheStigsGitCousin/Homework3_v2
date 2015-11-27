@@ -5,7 +5,6 @@
  */
 package market;
 
-import com.sun.org.apache.xml.internal.utils.SerializableLocatorImpl;
 import java.io.Serializable;
 
 /**
