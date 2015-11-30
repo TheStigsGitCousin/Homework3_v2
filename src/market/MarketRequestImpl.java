@@ -14,6 +14,8 @@ import java.rmi.Naming;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
+import java.security.NoSuchAlgorithmException;
+import java.security.spec.InvalidKeySpecException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -52,12 +54,11 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     private PreparedStatement findTotalBoughtAndSoldStatement;
 //    private PreparedStatement deletePurchaseStatement;
     
-    private Bank bankobj;
-    
     // The key is the item-ID
     private final Map<Long, Item> uploadedItems=new HashMap<>();
     private final Map<String, List<Item>> wishedItems=new HashMap<>();
     private final Map<String, User> registeredUsers=new HashMap<>();
+    private final Map<String, Bank> banks=new HashMap<>();
     
     public MarketRequestImpl() throws RemoteException
     {
@@ -66,16 +67,6 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
         } catch (SQLException ex) {
             Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
         }
-//        try {
-//            bankobj = (Bank) Naming.lookup("");
-//        } catch (NotBoundException ex) {
-//            Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
-//            if(bankobj==null){
-////                statusChanged("The bank wasn't found");
-//            }
-//        } catch (MalformedURLException ex) {
-//            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
-//        }
     }
     
     private void restoreState(){
@@ -94,11 +85,19 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     private void connect() throws SQLException{
-        conn=DriverManager.getConnection("jdbc:derby://localhost:1527/" + datasource + ";create=true");
-        statement=conn.createStatement();
-        createTable();
-        
-        restoreState();
+        try {
+            // This will load the MySQL driver, each DB has its own driver
+            Class.forName("com.mysql.jdbc.Driver");
+            // Setup the connection with the DB
+            conn = DriverManager.getConnection("jdbc:mysql://localhost/homework3?user=root&password=sqlpass");
+            
+            statement=conn.createStatement();
+            createTable();
+            
+            restoreState();
+        } catch (ClassNotFoundException ex) {
+            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
     
     private void createTable() {
@@ -107,22 +106,19 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
             ro=statement.executeUpdate("CREATE TABLE ITEM (name VARCHAR(64) NOT NULL, price FLOAT NOT NULL, id BIGINT PRIMARY KEY, owner VARCHAR(64) NOT NULL)");
             System.out.println("ITEM CREATION changed "+ro+" rows");
         } catch (SQLException ex) {
-            if(!ex.getSQLState().equals("X0Y32"))
-                Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
         }
         try {
-            ro=statement.executeUpdate("CREATE TABLE OWNER (name VARCHAR(64) PRIMARY KEY, password VARCHAR(256) NOT NULL)");
+            ro=statement.executeUpdate("CREATE TABLE OWNER (name VARCHAR(64) PRIMARY KEY, password VARCHAR(256) NOT NULL, bankname varchar(64) NOT NULL)");
             System.out.println("OWNER CREATION changed "+ro+" rows");
         } catch (SQLException ex) {
-            if(!ex.getSQLState().equals("X0Y32"))
-                Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
         }
         try {
             ro=statement.executeUpdate("CREATE TABLE PURCHASE (buyer VARCHAR(64) NOT NULL, seller VARCHAR(64) NOT NULL, price FLOAT)");
             System.out.println("PURCHASE CREATION changed "+ro+" rows");
         } catch (SQLException ex) {
-            if(!ex.getSQLState().equals("X0Y32"))
-                Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
         }
         
         try {
@@ -140,14 +136,21 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
             findAllItemStatement=conn.prepareStatement("SELECT name, price, id, owner FROM ITEM");
             deleteItemStatement=conn.prepareStatement("DELETE FROM ITEM WHERE id=?");
             // User statements
-            insertUserStatement=conn.prepareStatement("INSERT INTO OWNER (name, password) VALUES (?, ?)");
-            findUserStatement=conn.prepareStatement("SELECT name, password FROM OWNER WHERE name=?");
+            insertUserStatement=conn.prepareStatement("INSERT INTO OWNER (name, password, bankname) VALUES (?, ?, ?)");
+            findUserStatement=conn.prepareStatement("SELECT name, password, bankname FROM OWNER WHERE name=?");
             deleteUserStatement=conn.prepareStatement("DELETE FROM OWNER WHERE name=?");
             // Purchase statements
             insertPurchaseStatement=conn.prepareStatement("INSERT INTO PURCHASE (buyer, seller, price) VALUES (?, ?, ?)");
             findBoughtPurchaseStatement=conn.prepareStatement("SELECT buyer, seller, price FROM PURCHASE WHERE buyer=?");
             findSoldPurchaseStatement=conn.prepareStatement("SELECT buyer, seller, price FROM PURCHASE WHERE seller=?");
-//            findTotalBoughtAndSoldStatement=conn.prepareStatement("SELECT SUM(buyer = ?) As bought, SUM(seller = ?) AS sold FROM PURCHASE");
+            findTotalBoughtAndSoldStatement=conn.prepareStatement("SELECT SUM(buyer = ?) As bought, SUM(seller = ?) AS sold FROM PURCHASE");
+            
+            findTotalBoughtAndSoldStatement.setString(1,"david");
+            findTotalBoughtAndSoldStatement.setString(2,"david");
+            rs=findTotalBoughtAndSoldStatement.executeQuery();
+            while(rs.next()){
+                System.out.println("Total purchases: bought = "+rs.getInt(1)+", sold = "+rs.getInt(2));
+            }
 //        deletePurchaseStatement=conn.prepareStatement("DELETE FROM PURCHASE WHERE name=?");
         } catch (SQLException ex) {
             Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
@@ -328,49 +331,85 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
         System.out.println("register. "+user.getName());
         String message="Error registering user";
         synchronized(registeredUsers){
-            if(!registeredUsers.containsKey(user.getName())){
-                ResultSet result = null;
-//        try {
-//            findUserStatement.setString(1, user.getName());
-//            result = findUserStatement.executeQuery();
-                
-//            if (result.next()) {
-//                // account exists, instantiate, put in cache and throw exception.
-//                user = new UserImpl(user.getName(), result.getString(2), bank.);
-//                accounts.put(name, account);
-//                throw new RejectedException("Rejected: Account for: " + name
-//                                                    + " already exists");
-//            }
-//            result.close();
-//
-//            // create account.
-//            createAccountStatement.setString(1, name);
-//            int rows = createAccountStatement.executeUpdate();
-//            if (rows == 1) {
-//                account = new AccountImpl(name, getConnection());
-//                accounts.put(name, account);
-//                System.out.println("Bank: Account: " + account
-//                                           + " has been created for " + name);
-//                return account;
-//            } else {
-//                throw new RejectedException("Cannot create an account for " + name);
-//            }
-//        } catch (SQLException | ClassNotFoundException e) {
-//            e.printStackTrace();
-//            throw new RejectedException("Cannot create an account for " + name, e);
-//        }
-//
-//                message="Registration successful";
-//            }else{
-//                System.out.println("Account [" + user.getName() + "] exists.");
-//            }
-            registeredUsers.put(user.getName(), user);
-//
+            User loadedUser=tryLoadUser(user.getName());
+            if(loadedUser==null){
+                try {
+                    // Create user
+                    insertUserStatement.setString(1, user.getName());
+                    insertUserStatement.setString(2, user.getPassword());
+                    insertUserStatement.setString(3, user.getBankName());
+                    int rows=insertUserStatement.executeUpdate();
+                    if(rows==1){
+                        try {
+                            Bank bankobj = getBank(user.getBankName());
+                            user.setBankAccount(bankobj.getAccount(user.getName()));
+                            registeredUsers.put(user.getName(), user);
+                            System.out.println("Account [" + user.getName() + "] created.");
+                            message="User ["+user.getName()+"] registered.";
+                        } catch (Exception ex) {
+                            message="Bank problem. Not registered.";
+                        }
+                    }else{
+                        System.out.println("Account [" + user.getName() + "] NOT created.");
+                        message="User not registered.";
+                    }
+                } catch (SQLException ex) {
+                    Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+                    message="User not registered.";
+                }
+            } else {
+                System.out.println("Account [" + user.getName() + "] exists.");
+                message="User name already exist.";
             }
         }
         Message msg=new Message();
         msg.message=message;
         return msg;
+    }
+    
+    private User tryLoadUser(String userName){
+        User user=registeredUsers.get(userName);
+        if(user==null){
+            ResultSet result = null;
+            try {
+                findUserStatement.setString(1, userName);
+                result = findUserStatement.executeQuery();
+                
+                Bank bankobj;
+                if (result.next()) {
+                    String bankName=result.getString(3);
+                    try {
+                        bankobj = getBank(bankName);
+                        try {
+                            user = new UserImpl(result.getString(1), result.getString(2), bankobj.getAccount(userName), bankName);
+                        } catch (Exception ex) {
+                            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+                        }
+                    } catch (Exception ex) {
+                    }
+                }
+            }catch(SQLException ex){
+                Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+            }
+        }
+        return user;
+    }
+    
+    private Bank getBank(String bankName) throws Exception {
+        Bank bankobj=banks.get(bankName);
+        if(bankobj==null){
+            try {
+                bankobj = (Bank) Naming.lookup(bankName);
+                banks.put(bankName, bankobj);
+            } catch (NotBoundException ex) {
+                Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
+                throw new Exception();
+            } catch (MalformedURLException ex) {
+                Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+                throw new Exception();
+            }
+        }
+        return bankobj;
     }
     
     @Override
@@ -378,15 +417,20 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
         System.out.println("unregister. "+owner.getName());
         String message="Error unregistering user";
         synchronized(registeredUsers){
-            registeredUsers.remove(owner.getName());
-            List<Item> c=new ArrayList<>();
-            // Remove items the owner has uploaded
-            for(Item item:uploadedItems.values()){
-                if(item.getOwner().equals(owner.getName()))
-                    c.add(item);
+            try {
+                deleteUserStatement.setString(1, owner.getName());
+                registeredUsers.remove(owner.getName());
+                List<Item> c=new ArrayList<>();
+                // Remove items the owner has uploaded
+                for(Item item:uploadedItems.values()){
+                    if(item.getOwner().equals(owner.getName()))
+                        c.add(item);
+                }
+                uploadedItems.values().removeAll(c);
+                message="Unregistration successful";
+            } catch (SQLException ex) {
+                Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
             }
-            uploadedItems.values().removeAll(c);
-            message="Unregistration successful";
         }
         Message msg=new Message();
         msg.message=message;
@@ -394,9 +438,22 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message LogIn(String name) throws RemoteException {
+    public Message LogIn(User user, String name, String password) throws RemoteException {
         Message msg=new Message();
-        msg.obj=registeredUsers.get(name);
+        try {
+            String hash=Handler.generateStorngPasswordHash(password);
+            User loadedUser=tryLoadUser(name);
+            if(hash.equals(loadedUser.getPassword())){
+                user.createFromUser(loadedUser);
+                msg.message="Logged in.";
+            }
+        } catch (NoSuchAlgorithmException ex) {
+            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+            msg.message="Problem. Try again.";
+        } catch (InvalidKeySpecException ex) {
+            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+            msg.message="Problem. Try again.";
+        }
         return msg;
     }
     

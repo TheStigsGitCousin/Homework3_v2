@@ -30,9 +30,14 @@ public class UserImpl extends UnicastRemoteObject implements User {
     private String bankName;
     
     public UserImpl(String name, String password, Account account, String bankName) throws RemoteException, Exception{
+        this(name, password, bankName);
+        this.account=account;
+    }
+    
+    public UserImpl(String name, String password, String bankName) throws RemoteException, Exception{
         this.name=name;
         try {
-            this.password=generateStorngPasswordHash(password);
+            this.password=Handler.generateStorngPasswordHash(password);
         } catch (NoSuchAlgorithmException ex) {
             Logger.getLogger(UserImpl.class.getName()).log(Level.SEVERE, null, ex);
             throw new Exception();
@@ -40,41 +45,7 @@ public class UserImpl extends UnicastRemoteObject implements User {
             Logger.getLogger(UserImpl.class.getName()).log(Level.SEVERE, null, ex);
             throw new Exception();
         }
-        this.account=account;
         this.bankName=bankName;
-    }
-    
-    private static String generateStorngPasswordHash(String password) throws NoSuchAlgorithmException, InvalidKeySpecException
-    {
-        int iterations = 1000;
-        char[] chars = password.toCharArray();
-        byte[] salt = getSalt().getBytes();
-         
-        PBEKeySpec spec = new PBEKeySpec(chars, salt, iterations, 64 * 8);
-        SecretKeyFactory skf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-        byte[] hash = skf.generateSecret(spec).getEncoded();
-        return iterations + ":" + toHex(salt) + ":" + toHex(hash);
-    }
-     
-    private static String getSalt() throws NoSuchAlgorithmException
-    {
-        SecureRandom sr = SecureRandom.getInstance("SHA1PRNG");
-        byte[] salt = new byte[16];
-        sr.nextBytes(salt);
-        return salt.toString();
-    }
-     
-    private static String toHex(byte[] array) throws NoSuchAlgorithmException
-    {
-        BigInteger bi = new BigInteger(1, array);
-        String hex = bi.toString(16);
-        int paddingLength = (array.length * 2) - hex.length();
-        if(paddingLength > 0)
-        {
-            return String.format("%0"  +paddingLength + "d", 0) + hex;
-        }else{
-            return hex;
-        }
     }
     
     @Override
@@ -103,7 +74,7 @@ public class UserImpl extends UnicastRemoteObject implements User {
     
     @Override
     public String getPassword() throws RemoteException {
-        return name;
+        return password;
     }
     
     @Override
@@ -112,7 +83,24 @@ public class UserImpl extends UnicastRemoteObject implements User {
     }
     
     @Override
+    public void setBankAccount(Account account){
+        this.account=account;
+    }
+    
+    @Override
     public String getBankName() throws RemoteException {
         return bankName;
+    }
+    
+    @Override
+    public void createFromUser(User user){
+        try {
+            this.name=user.getName();
+            this.password=user.getPassword();
+            this.account=user.getBankAccount();
+            this.bankName=user.getBankName();
+        } catch (RemoteException ex) {
+            Logger.getLogger(UserImpl.class.getName()).log(Level.SEVERE, null, ex);
+        }
     }
 }
