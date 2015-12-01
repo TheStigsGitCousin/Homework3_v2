@@ -46,7 +46,7 @@ public class MarketClient {
         
         frame.setContentPane(clientPanel);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(700, 300);
+        frame.setSize(1000, 300);
         frame.setVisible(true);
     }
     

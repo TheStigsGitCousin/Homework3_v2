@@ -18,6 +18,7 @@ public interface MarketRequest extends Remote {
     public Message ListItems() throws RemoteException;
     public Message BuyItem(long itemId, User owner) throws RemoteException;
     public Message AddWish(Item item) throws RemoteException;
+    public Message GetUserActivity(User user) throws RemoteException;
     public Message Register(User owner) throws RemoteException;
     public Message Unregister(User owner) throws RemoteException;
     public Message LogIn(User loadedUser, String name, String password) throws RemoteException;

@@ -252,15 +252,19 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
                     }
                     if(successful){
                         try {
-                            sellerAccount.deposit(item.getPrice());
-                            message="Transaction successful.";
-                            
                             try {
                                 deleteItemStatement.setLong(1, item.getId());
+                                int rows=deleteItemStatement.executeUpdate();
+                                if(rows!=1)
+                                    message=restoreTransaction(buyerAccount, item);
+                                
                             } catch (SQLException ex) {
                                 Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
                                 throw new RejectedException("Couldn't remove item from DB");
                             }
+                            
+                            sellerAccount.deposit(item.getPrice());
+                            message="Transaction successful.";
                             
                             uploadedItems.remove(itemId);
                             
@@ -330,36 +334,40 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     public Message Register(User user) throws RemoteException {
         System.out.println("register. "+user.getName());
         String message="Error registering user";
-        synchronized(registeredUsers){
-            User loadedUser=tryLoadUser(user.getName());
-            if(loadedUser==null){
-                try {
-                    // Create user
-                    insertUserStatement.setString(1, user.getName());
-                    insertUserStatement.setString(2, user.getPassword());
-                    insertUserStatement.setString(3, user.getBankName());
-                    int rows=insertUserStatement.executeUpdate();
-                    if(rows==1){
-                        try {
-                            Bank bankobj = getBank(user.getBankName());
-                            user.setBankAccount(bankobj.getAccount(user.getName()));
-                            registeredUsers.put(user.getName(), user);
-                            System.out.println("Account [" + user.getName() + "] created.");
-                            message="User ["+user.getName()+"] registered.";
-                        } catch (Exception ex) {
-                            message="Bank problem. Not registered.";
+        if(user.getPassword().length()<8){
+            message="Your password is too short (8 or more characters required).";
+        }else{
+            synchronized(registeredUsers){
+                User loadedUser=tryLoadUser(user.getName());
+                if(loadedUser==null){
+                    try {
+                        // Create user
+                        insertUserStatement.setString(1, user.getName());
+                        insertUserStatement.setString(2, user.getPassword());
+                        insertUserStatement.setString(3, user.getBankName());
+                        int rows=insertUserStatement.executeUpdate();
+                        if(rows==1){
+                            try {
+                                Bank bankobj = getBank(user.getBankName());
+                                user.setBankAccount(bankobj.getAccount(user.getName()));
+                                registeredUsers.put(user.getName(), user);
+                                System.out.println("Account [" + user.getName() + "] created.");
+                                message="User ["+user.getName()+"] registered.";
+                            } catch (Exception ex) {
+                                message="Bank problem. Not registered.";
+                            }
+                        }else{
+                            System.out.println("Account [" + user.getName() + "] NOT created.");
+                            message="User not registered.";
                         }
-                    }else{
-                        System.out.println("Account [" + user.getName() + "] NOT created.");
+                    } catch (SQLException ex) {
+                        Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
                         message="User not registered.";
                     }
-                } catch (SQLException ex) {
-                    Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
-                    message="User not registered.";
+                } else {
+                    System.out.println("Account [" + user.getName() + "] exists.");
+                    message="User name already exist. Try another name.";
                 }
-            } else {
-                System.out.println("Account [" + user.getName() + "] exists.");
-                message="User name already exist.";
             }
         }
         Message msg=new Message();
@@ -369,7 +377,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     
     private User tryLoadUser(String userName){
         User user=registeredUsers.get(userName);
-        if(user==null){
+        if(user==null || !isUserOnline(user)){
             ResultSet result = null;
             try {
                 findUserStatement.setString(1, userName);
@@ -393,6 +401,16 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
             }
         }
         return user;
+    }
+    
+    private boolean isUserOnline(User user) {
+        try {
+            user.getName();
+            return true;
+        } catch (RemoteException ex) {
+//            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+            return false;
+        }
     }
     
     private Bank getBank(String bankName) throws Exception {
@@ -439,22 +457,48 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     
     @Override
     public Message LogIn(User user, String name, String password) throws RemoteException {
+        System.out.println("Try to log in user ["+name+"]");
         Message msg=new Message();
         try {
-            String hash=Handler.generateStorngPasswordHash(password);
             User loadedUser=tryLoadUser(name);
-            if(hash.equals(loadedUser.getPassword())){
-                user.createFromUser(loadedUser);
-                msg.message="Logged in.";
+            if(loadedUser!=null){
+//                System.out.println("pass = "+password+", hash = "+loadedUser.getPassword());
+                if(BCrypt.checkpw(password, loadedUser.getPassword())){
+                    user.createFromUser(loadedUser);
+                    registeredUsers.put(user.getName(), user);
+                    msg.message="Logged in.";
+                }else {
+                    msg.message="Username or password was incorrect.";
+                }
+            }else{
+                msg.message="Username or password was incorrect.";
             }
-        } catch (NoSuchAlgorithmException ex) {
-            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
-            msg.message="Problem. Try again.";
-        } catch (InvalidKeySpecException ex) {
+            
+        } catch (Exception ex) {
             Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
             msg.message="Problem. Try again.";
         }
         return msg;
     }
     
+    @Override
+    public Message GetUserActivity(User user) throws RemoteException {
+        Message msg=new Message();
+        try {
+            findTotalBoughtAndSoldStatement.setString(1, user.getName());
+            findTotalBoughtAndSoldStatement.setString(2, user.getName());
+            ResultSet result=findTotalBoughtAndSoldStatement.executeQuery();
+            if(result.next()){
+                int bought=result.getInt("bought");
+                int sold=result.getInt("sold");
+                msg.message=user.getName()+" has bought "+bought+" items, and sold "+sold+" items.";
+            }else{
+                msg.message="Couldn't find any indicators.";
+            }
+        } catch (SQLException ex) {
+            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+            msg.message="Problem finding indicators. Try again.";
+        }
+        return msg;
+    }
 }
