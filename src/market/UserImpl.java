@@ -74,6 +74,11 @@ public class UserImpl extends UnicastRemoteObject implements User {
     }
     
     @Override
+    public void setPassword(String password){
+        this.password=password;
+    }
+    
+    @Override
     public Account getBankAccount() throws RemoteException {
         return account;
     }

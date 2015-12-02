@@ -40,7 +40,6 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     private Connection conn;
     private Statement statement;
     private PreparedStatement insertItemStatement;
-    private PreparedStatement findItemStatement;
     private PreparedStatement findAllItemStatement;
     private PreparedStatement deleteItemStatement;
     
@@ -49,8 +48,6 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     private PreparedStatement deleteUserStatement;
     
     private PreparedStatement insertPurchaseStatement;
-    private PreparedStatement findBoughtPurchaseStatement;
-    private PreparedStatement findSoldPurchaseStatement;
     private PreparedStatement findTotalBoughtAndSoldStatement;
 //    private PreparedStatement deletePurchaseStatement;
     
@@ -58,6 +55,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     private final Map<Long, Item> uploadedItems=new HashMap<>();
     private final Map<String, List<Item>> wishedItems=new HashMap<>();
     private final Map<String, User> registeredUsers=new HashMap<>();
+    private final Map<String, User> loggedInUsers=new HashMap<>();
     private final Map<String, Bank> banks=new HashMap<>();
     
     public MarketRequestImpl() throws RemoteException
@@ -115,7 +113,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
             Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
         }
         try {
-            ro=statement.executeUpdate("CREATE TABLE PURCHASE (buyer VARCHAR(64) NOT NULL, seller VARCHAR(64) NOT NULL, price FLOAT)");
+            ro=statement.executeUpdate("CREATE TABLE PURCHASE (buyer VARCHAR(64) NOT NULL, seller VARCHAR(64) NOT NULL, price FLOAT NOT NULL, item VARCHAR(64) NOT NULL)");
             System.out.println("PURCHASE CREATION changed "+ro+" rows");
         } catch (SQLException ex) {
             Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
@@ -132,7 +130,6 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
             }
             // Item statements
             insertItemStatement=conn.prepareStatement("INSERT INTO ITEM (name, price, id, owner) VALUES (?, ?, ?, ?)");
-            findItemStatement=conn.prepareStatement("SELECT name, price, id, owner FROM ITEM WHERE id=?");
             findAllItemStatement=conn.prepareStatement("SELECT name, price, id, owner FROM ITEM");
             deleteItemStatement=conn.prepareStatement("DELETE FROM ITEM WHERE id=?");
             // User statements
@@ -140,9 +137,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
             findUserStatement=conn.prepareStatement("SELECT name, password, bankname FROM OWNER WHERE name=?");
             deleteUserStatement=conn.prepareStatement("DELETE FROM OWNER WHERE name=?");
             // Purchase statements
-            insertPurchaseStatement=conn.prepareStatement("INSERT INTO PURCHASE (buyer, seller, price) VALUES (?, ?, ?)");
-            findBoughtPurchaseStatement=conn.prepareStatement("SELECT buyer, seller, price FROM PURCHASE WHERE buyer=?");
-            findSoldPurchaseStatement=conn.prepareStatement("SELECT buyer, seller, price FROM PURCHASE WHERE seller=?");
+            insertPurchaseStatement=conn.prepareStatement("INSERT INTO PURCHASE (buyer, seller, price, item) VALUES (?, ?, ?, ?)");
             findTotalBoughtAndSoldStatement=conn.prepareStatement("SELECT SUM(buyer = ?) As bought, SUM(seller = ?) AS sold FROM PURCHASE");
             
             findTotalBoughtAndSoldStatement.setString(1,"david");
@@ -159,8 +154,15 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message SellItem(Item item) throws RemoteException {
+    public Message sellItem(Item item) throws RemoteException {
         System.out.println("sell item. "+item.toString());
+        
+        if(!loggedInUsers.containsKey(item.getOwner())){
+            Message msg=new Message();
+            msg.message="You are not logged in.";
+            return msg;
+        }
+        
         String message="error uploading item";
         synchronized(uploadedItems){
             long id;
@@ -194,10 +196,14 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
                             for(Item wishedItem:li){
                                 // If a wished item has the same name and a equal or higher price than the currently uploaded item => send notification
                                 // to the owner of the wish-item
-                                if(item.getName().equals(wishedItem.getName()) && item.getPrice()<=wishedItem.getPrice()){
-                                    User owner=registeredUsers.get(wishedItem.getOwner());
-                                    if(owner!=null)
-                                        owner.wishAvaible(item);
+                                try{
+                                    if(item.getName().equals(wishedItem.getName()) && item.getPrice()<=wishedItem.getPrice()){
+                                        User owner=registeredUsers.get(wishedItem.getOwner());
+                                        if(owner!=null)
+                                            owner.wishAvaible(item);
+                                    }
+                                }catch(RemoteException ex){
+                                    System.err.println("Couldn't send wish. User not online.");
                                 }
                             }
                         }
@@ -231,14 +237,20 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message BuyItem(long itemId, User buyer) throws RemoteException {
+    public Message buyItem(long itemId, User buyer) throws RemoteException {
+        if(!loggedInUsers.containsKey(buyer.getName())){
+            Message msg=new Message();
+            msg.message="You are not logged in.";
+            return msg;
+        }
+        
         String message="Unspecified error occured when buying item. No item bought.";
         synchronized(uploadedItems){
             Item item=uploadedItems.get(itemId);
             System.out.println("buy item. "+item.toString());
             if(item!=null){
                 System.out.println("buy item. item = "+item.toString()+", buyer = "+buyer.toString());
-                User owner=registeredUsers.get(item.getOwner());
+                User owner=tryLoadUser(item.getOwner());
                 if(owner!=null){
                     Account sellerAccount=owner.getBankAccount();
                     Account buyerAccount=buyer.getBankAccount();
@@ -255,29 +267,36 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
                             try {
                                 deleteItemStatement.setLong(1, item.getId());
                                 int rows=deleteItemStatement.executeUpdate();
-                                if(rows!=1)
+                                if(rows==1){
+                                    try{
+                                        sellerAccount.deposit(item.getPrice());
+                                        message="Transaction successful.";
+                                        
+                                        uploadedItems.remove(itemId);
+                                        
+                                        insertPurchaseStatement.setString(1, buyer.getName());
+                                        insertPurchaseStatement.setString(2, owner.getName());
+                                        insertPurchaseStatement.setFloat(3, item.getPrice());
+                                        insertPurchaseStatement.setString(4, item.getName());
+                                        rows=insertPurchaseStatement.executeUpdate();
+                                        System.out.println("Purchase-insert changed "+rows+" rows");
+                                        try{
+                                            owner.itemSold(item);
+                                        }catch(Exception e){}
+                                    }catch(RemoteException ex){
+                                        Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+                                        message="Couldn't rollback transaction.";
+                                    }
+                                }else{
                                     message=restoreTransaction(buyerAccount, item);
-                                
+                                    System.err.println(message);
+                                    message="Problem occured.";
+                                }
                             } catch (SQLException ex) {
                                 Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
                                 throw new RejectedException("Couldn't remove item from DB");
                             }
-                            
-                            sellerAccount.deposit(item.getPrice());
-                            message="Transaction successful.";
-                            
-                            uploadedItems.remove(itemId);
-                            
-                            insertPurchaseStatement.setString(1, buyer.getName());
-                            insertPurchaseStatement.setString(2, owner.getName());
-                            insertPurchaseStatement.setFloat(3, item.getPrice());
-                            int rows=insertPurchaseStatement.executeUpdate();
-                            System.out.println("Purchase-insert changed "+rows+" rows");
-                            owner.itemSold(item);
                         } catch (RejectedException ex) {
-                            message=restoreTransaction(buyerAccount, item);
-                        } catch (SQLException ex) {
-                            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
                             message=restoreTransaction(buyerAccount, item);
                         }
                     }
@@ -303,8 +322,15 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message AddWish(Item item) throws RemoteException {
+    public Message addWish(Item item) throws RemoteException {
         System.out.println("add item. "+item.toString());
+        
+        if(!loggedInUsers.containsKey(item.getOwner())){
+            Message msg=new Message();
+            msg.message="You are not logged in.";
+            return msg;
+        }
+        
         String message="Error adding wish.";
         synchronized(registeredUsers){
             User owner=registeredUsers.get(item.getOwner());
@@ -331,12 +357,13 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message Register(User user) throws RemoteException {
+    public Message register(User user) throws RemoteException {
         System.out.println("register. "+user.getName());
         String message="Error registering user";
         if(user.getPassword().length()<8){
             message="Your password is too short (8 or more characters required).";
         }else{
+            user.setPassword(BCrypt.hashpw(user.getPassword(), BCrypt.gensalt()));
             synchronized(registeredUsers){
                 User loadedUser=tryLoadUser(user.getName());
                 if(loadedUser==null){
@@ -431,7 +458,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message Unregister(User owner) throws RemoteException {
+    public Message unregister(User owner) throws RemoteException {
         System.out.println("unregister. "+owner.getName());
         String message="Error unregistering user";
         synchronized(registeredUsers){
@@ -456,7 +483,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message LogIn(User user, String name, String password) throws RemoteException {
+    public Message logIn(User user, String name, String password) throws RemoteException {
         System.out.println("Try to log in user ["+name+"]");
         Message msg=new Message();
         try {
@@ -466,6 +493,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
                 if(BCrypt.checkpw(password, loadedUser.getPassword())){
                     user.createFromUser(loadedUser);
                     registeredUsers.put(user.getName(), user);
+                    loggedInUsers.put(user.getName(), user);
                     msg.message="Logged in.";
                 }else {
                     msg.message="Username or password was incorrect.";
@@ -482,7 +510,30 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message GetUserActivity(User user) throws RemoteException {
+    public Message logOut(User user) throws RemoteException {
+        System.out.println("Try to log out user ["+user.getName()+"]");
+        Message msg=new Message();
+        try {
+            if(user!=null){
+                loggedInUsers.remove(user.getName());
+                msg.message="Logged out";
+            }
+                
+        } catch (Exception ex) {
+            Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
+            msg.message="Problem. Try again.";
+        }
+        return msg;
+    }
+    
+    @Override
+    public Message getUserActivity(User user) throws RemoteException {
+        if(!loggedInUsers.containsKey(user.getName())){
+            Message msg=new Message();
+            msg.message="You are not logged in.";
+            return msg;
+        }
+        
         Message msg=new Message();
         try {
             findTotalBoughtAndSoldStatement.setString(1, user.getName());

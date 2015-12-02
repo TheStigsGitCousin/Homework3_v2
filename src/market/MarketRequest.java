@@ -14,12 +14,13 @@ import java.rmi.RemoteException;
  */
 public interface MarketRequest extends Remote {
     
-    public Message SellItem(Item item) throws RemoteException;
+    public Message sellItem(Item item) throws RemoteException;
     public Message ListItems() throws RemoteException;
-    public Message BuyItem(long itemId, User owner) throws RemoteException;
-    public Message AddWish(Item item) throws RemoteException;
-    public Message GetUserActivity(User user) throws RemoteException;
-    public Message Register(User owner) throws RemoteException;
-    public Message Unregister(User owner) throws RemoteException;
-    public Message LogIn(User loadedUser, String name, String password) throws RemoteException;
+    public Message buyItem(long itemId, User owner) throws RemoteException;
+    public Message addWish(Item item) throws RemoteException;
+    public Message getUserActivity(User user) throws RemoteException;
+    public Message register(User owner) throws RemoteException;
+    public Message unregister(User owner) throws RemoteException;
+    public Message logIn(User loadedUser, String name, String password) throws RemoteException;
+    public Message logOut(User user) throws RemoteException;
 }
