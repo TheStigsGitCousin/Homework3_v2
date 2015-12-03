@@ -55,7 +55,7 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     private final Map<Long, Item> uploadedItems=new HashMap<>();
     private final Map<String, List<Item>> wishedItems=new HashMap<>();
     private final Map<String, User> registeredUsers=new HashMap<>();
-    private final Map<String, User> loggedInUsers=new HashMap<>();
+    private final Map<Long, User> loggedInUsers=new HashMap<>();
     private final Map<String, Bank> banks=new HashMap<>();
     
     public MarketRequestImpl() throws RemoteException
@@ -154,10 +154,10 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message sellItem(Item item) throws RemoteException {
+    public Message sellItem(long token, Item item) throws RemoteException {
         System.out.println("sell item. "+item.toString());
         
-        if(!loggedInUsers.containsKey(item.getOwner())){
+        if(!loggedInUsers.containsKey(token)){
             Message msg=new Message();
             msg.message="You are not logged in.";
             return msg;
@@ -237,8 +237,8 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message buyItem(long itemId, User buyer) throws RemoteException {
-        if(!loggedInUsers.containsKey(buyer.getName())){
+    public Message buyItem(long token, long itemId, User buyer) throws RemoteException {
+        if(!loggedInUsers.containsKey(token)){
             Message msg=new Message();
             msg.message="You are not logged in.";
             return msg;
@@ -322,10 +322,10 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message addWish(Item item) throws RemoteException {
+    public Message addWish(long token, Item item) throws RemoteException {
         System.out.println("add item. "+item.toString());
         
-        if(!loggedInUsers.containsKey(item.getOwner())){
+        if(!loggedInUsers.containsKey(token)){
             Message msg=new Message();
             msg.message="You are not logged in.";
             return msg;
@@ -493,8 +493,15 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
                 if(BCrypt.checkpw(password, loadedUser.getPassword())){
                     user.createFromUser(loadedUser);
                     registeredUsers.put(user.getName(), user);
-                    loggedInUsers.put(user.getName(), user);
+                    long id;
+                    // Find a unique ID (i.e. an ID thats not present in the uploadedItems collection (Hashmap)
+                    do {
+                        id=Handler.getRandomLong();
+                    }
+                    while(loggedInUsers.containsKey(id));
+                    loggedInUsers.put(id, user);
                     msg.message="Logged in.";
+                    msg.obj=id;
                 }else {
                     msg.message="Username or password was incorrect.";
                 }
@@ -510,15 +517,15 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message logOut(User user) throws RemoteException {
+    public Message logOut(long token, User user) throws RemoteException {
         System.out.println("Try to log out user ["+user.getName()+"]");
         Message msg=new Message();
         try {
             if(user!=null){
-                loggedInUsers.remove(user.getName());
+                loggedInUsers.remove(token);
                 msg.message="Logged out";
             }
-                
+            
         } catch (Exception ex) {
             Logger.getLogger(MarketRequestImpl.class.getName()).log(Level.SEVERE, null, ex);
             msg.message="Problem. Try again.";
@@ -527,8 +534,8 @@ public class MarketRequestImpl extends UnicastRemoteObject implements MarketRequ
     }
     
     @Override
-    public Message getUserActivity(User user) throws RemoteException {
-        if(!loggedInUsers.containsKey(user.getName())){
+    public Message getUserActivity(long token, User user) throws RemoteException {
+        if(!loggedInUsers.containsKey(token)){
             Message msg=new Message();
             msg.message="You are not logged in.";
             return msg;

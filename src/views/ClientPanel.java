@@ -44,6 +44,8 @@ public class ClientPanel extends Panel {
     
     private String bankName;
     
+    private static long TOKEN;
+    
     private static MarketRequest market;
     private static Bank bankobj;
     private static final String DEFAULT_BANK_NAME = "Nordea";
@@ -186,7 +188,7 @@ public class ClientPanel extends Panel {
     private void getActivity(){
         if(user!=null){
             try {
-                Message msg=market.getUserActivity(user);
+                Message msg=market.getUserActivity(TOKEN, user);
                 statusChanged(msg.message);
             } catch (RemoteException ex) {
                 Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
@@ -240,6 +242,10 @@ public class ClientPanel extends Panel {
                 
                 try {
                     Message result=market.logIn(user, accountNameTextField.getText(),accountPasswordTextField.getText());
+                    if(result.obj!=null)
+                            TOKEN=(long)result.obj;
+                        
+                        System.out.println("TOKEN = "+TOKEN);
                     if(result.message.contains("Logged in")){
                         buyButton.setEnabled(true);
                         sellButton.setEnabled(true);
@@ -291,11 +297,11 @@ public class ClientPanel extends Panel {
                             newUser=new UserImpl(accountNameTextField.getText(), password, bankName);
                         } catch (Exception ex) {
                             Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
-                            statusChanged("Catastrophic error with password encrypting.");
                             return;
                         }
                         Message msg=market.register(newUser);
                         String result=msg.message;
+                        
                         statusChanged(result);
                     } catch (RemoteException ex) {
                         Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
@@ -321,7 +327,7 @@ public class ClientPanel extends Panel {
                 Item item;
                 try {
                     item = new Item(itemNameTextField.getText(), price, user.getName());
-                    String result=market.sellItem(item).message;
+                    String result=market.sellItem(TOKEN, item).message;
                     statusChanged(result);
                 } catch (RemoteException ex) {
                     Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
@@ -349,7 +355,7 @@ public class ClientPanel extends Panel {
                     return;
                 
                 try {
-                    String result=market.buyItem(currentlyListedItems.get(index).getId(), user).message;
+                    String result=market.buyItem(TOKEN, currentlyListedItems.get(index).getId(), user).message;
                     statusChanged(result);
                 } catch (RemoteException ex) {
                     Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
@@ -374,7 +380,7 @@ public class ClientPanel extends Panel {
                 
                 try {
                     Item item=new Item(itemNameTextField.getText(), price, user.getName());
-                    String result=market.addWish(item).message;
+                    String result=market.addWish(TOKEN, item).message;
                     statusChanged(result);
                 } catch (RemoteException ex) {
                     Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
@@ -418,14 +424,14 @@ public class ClientPanel extends Panel {
             @Override
             public void run() {
                 try {
-                    Message msg=market.logOut(user);
+                    Message msg=market.logOut(TOKEN, user);
                     statusChanged(msg.message);
-                    buyButton.setEnabled(false);
-                    sellButton.setEnabled(false);
-                    wishButton.setEnabled(false);
-                    unregisterButton.setEnabled(false);
-                    getActivityButton.setEnabled(false);
-                    logOutButton.setEnabled(false);
+//                    buyButton.setEnabled(false);
+//                    sellButton.setEnabled(false);
+//                    wishButton.setEnabled(false);
+//                    unregisterButton.setEnabled(false);
+//                    getActivityButton.setEnabled(false);
+//                    logOutButton.setEnabled(false);
                 } catch (RemoteException ex) {
                     Logger.getLogger(ClientPanel.class.getName()).log(Level.SEVERE, null, ex);
                 }
