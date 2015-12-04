@@ -140,7 +140,7 @@ public class ClientPanel extends Panel {
         guessPanel.add(registerButton);
         guessPanel.add(logInButton);
         guessPanel.add(logOutButton);
-        guessPanel.add(unregisterButton);
+//        guessPanel.add(unregisterButton);
         guessPanel.add(listItemsButton);
         guessPanel.add(getActivityButton);
         guessPanel.add(newBankAccountButton);
